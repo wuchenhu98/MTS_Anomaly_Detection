@@ -8,12 +8,11 @@ from torch.utils.data import DataLoader, random_split, Subset
 from sklearn.preprocessing import MinMaxScaler
 
 from util.env import get_device, set_device
-from util.preprocess import build_loc_net, construct_data
+from util.preprocess import build_loc_net, construct_data, preprocess_data  # 添加了 preprocess_data 的导入
 from util.net_struct import get_feature_map, get_fc_graph_struc
 from util.iostream import printsep
 
 from datasets.TimeDataset import TimeDataset
-
 
 from models.GDN import GDN
 
@@ -27,8 +26,6 @@ from datetime import datetime
 import os
 import argparse
 from pathlib import Path
-
-import matplotlib.pyplot as plt
 
 import json
 import random
@@ -63,7 +60,6 @@ class Main():
         train_dataset_indata = construct_data(train, feature_map, labels=0)
         test_dataset_indata = construct_data(test, feature_map, labels=test.attack.tolist())
 
-
         cfg = {
             'slide_win': train_config['slide_win'],
             'slide_stride': train_config['slide_stride'],
@@ -72,18 +68,41 @@ class Main():
         train_dataset = TimeDataset(train_dataset_indata, fc_edge_index, mode='train', config=cfg)
         test_dataset = TimeDataset(test_dataset_indata, fc_edge_index, mode='test', config=cfg)
 
+        # ------------- 添加 Transformer 数据处理 -------------
+        # 使用 preprocess_data 处理 Transformer 输入数据
+        # 假设 preprocess_data 返回的是 (train_transformer, test_transformer)
+        train_transformer, test_transformer = preprocess_data(
+            train, 
+            test, 
+            label_column='attack',  # 根据需要调整
+            slide_win=train_config['slide_win'], 
+            slide_stride=train_config['slide_stride']
+        )
 
+        # 创建 Transformer 数据集
+        # train_dataset_transformer = TimeDataset(train_transformer, fc_edge_index, mode='train', config=cfg)
+        # test_dataset_transformer = TimeDataset(test_transformer, fc_edge_index, mode='test', config=cfg)
+
+        # 获取 GDN DataLoader
         train_dataloader, val_dataloader = self.get_loaders(train_dataset, train_config['seed'], train_config['batch'], val_ratio = train_config['val_ratio'])
+
+        # 获取 Transformer DataLoader
+        # train_dataloader_transformer, val_dataloader_transformer = self.get_loaders(train_dataset_transformer, train_config['seed'], train_config['batch'], val_ratio = train_config['val_ratio'])
 
         self.train_dataset = train_dataset
         self.test_dataset = test_dataset
-
 
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.test_dataloader = DataLoader(test_dataset, batch_size=train_config['batch'],
                             shuffle=False, num_workers=0)
 
+        # Transformer DataLoader
+        # self.train_dataloader_transformer = train_dataloader_transformer
+        # self.val_dataloader_transformer = val_dataloader_transformer
+        # self.test_dataloader_transformer = DataLoader(test_dataset_transformer, batch_size=train_config['batch'],
+        #                     shuffle=False, num_workers=0)
+        # ------------------------------------------------------
 
         edge_index_sets = []
         edge_index_sets.append(fc_edge_index)
@@ -95,8 +114,6 @@ class Main():
                 out_layer_inter_dim=train_config['out_layer_inter_dim'],
                 topk=train_config['topk']
             ).to(self.device)
-
-
 
     def run(self):
 
@@ -254,8 +271,3 @@ if __name__ == "__main__":
 
     main = Main(train_config, env_config, debug=False)
     main.run()
-
-
-
-
-
